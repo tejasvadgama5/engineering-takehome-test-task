@@ -23,6 +23,9 @@ const importCSVData = async (connection) => {
         });
       });
 
+      const dropTableQuery = `DROP TABLE IF EXISTS ${tableName}`;
+      await connection.execute(dropTableQuery);
+
       const createTableQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (${headers
         .map((header) => `${header} LONGTEXT`)
         .join(", ")})`;
