@@ -36,7 +36,7 @@ $ npm install
 
 #### use sample.env for reference
 
-### Start the backend app
+### Start the frontend app
 
 ```
 $ npm run dev
