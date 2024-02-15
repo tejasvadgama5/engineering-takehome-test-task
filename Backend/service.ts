@@ -1,3 +1,13 @@
+import { Connection } from "mysql2";
+import {
+  AbnormalData,
+  Conditions,
+  DiagnosticMetrics,
+  FileData,
+  ObxData,
+  ProcessData,
+} from "./types";
+
 const fs = require("fs");
 const csv = require("csv-parser");
 
@@ -8,7 +18,7 @@ const files = [
   "conditions.csv",
 ];
 
-const importCSVData = async (connection) => {
+const importCSVData = async (connection: Connection): Promise<void> => {
   try {
     for (const file of files) {
       const filePath = `./csv/${file}`;
@@ -17,8 +27,8 @@ const importCSVData = async (connection) => {
       const fileStream = fs.createReadStream(filePath);
       const parser = fileStream.pipe(csv());
 
-      const headers = await new Promise((resolve) => {
-        parser.once("headers", (headerArray) => {
+      const headers: string[] = await new Promise((resolve) => {
+        parser.once("headers", (headerArray: string[]) => {
           resolve(headerArray);
         });
       });
@@ -27,7 +37,7 @@ const importCSVData = async (connection) => {
       await connection.execute(dropTableQuery);
 
       const createTableQuery = `CREATE TABLE IF NOT EXISTS ${tableName} (${headers
-        .map((header) => `${header} LONGTEXT`)
+        ?.map((header) => `${header} LONGTEXT`)
         .join(", ")})`;
 
       await connection.execute(createTableQuery);
@@ -49,51 +59,55 @@ const importCSVData = async (connection) => {
   }
 };
 
-const interpretPathologyReport = async (obxData, connection) => {
+const interpretPathologyReport = async (
+  obxData: ObxData[],
+  connection: Connection
+): Promise<AbnormalData[] | undefined> => {
   try {
     if (!obxData) return;
-    const data = await new Promise((resolve, reject) => {
+    const data: DiagnosticMetrics[] = await new Promise((resolve, reject) => {
       const query_str =
-        "SELECT  `﻿name`, `oru_sonic_codes`, `standard_higher`, `standard_lower` FROM test_db.diagnostic_metrics where oru_sonic_codes != ''";
+        "SELECT  `﻿name`, `oru_sonic_codes`, `standard_higher`, `standard_lower` FROM diagnostic_metrics where oru_sonic_codes != ''";
       connection.query(query_str, (err, res) => {
         if (err) {
           reject(err);
         } else {
-          resolve(res);
+          resolve(res as DiagnosticMetrics[]);
         }
       });
     });
-    const conditionsData = await new Promise((resolve, reject) => {
-      const query_str =
-        "SELECT  `﻿name`, diagnostic_metrics FROM test_db.conditions";
+    const conditionsData: Conditions[] = await new Promise(
+      (resolve, reject) => {
+        const query_str = "SELECT  `﻿name`, diagnostic_metrics FROM conditions";
 
-      connection.query(query_str, (err, res) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(res);
-        }
-      });
-    });
-    const fileData = [];
-    obxData.forEach((item) => {
-      if (Number.parseFloat(item.data["OBX.5"])) {
+        connection.query(query_str, (err, res) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(res as Conditions[]);
+          }
+        });
+      }
+    );
+    const fileData: FileData[] = [];
+    obxData.forEach((item: ObxData) => {
+      if (Number.parseFloat(item.data["OBX.5"] as unknown as string)) {
         fileData.push({
           oru_code: item.data["OBX.3"]["OBX.3.2"],
-          value: Number.parseFloat(item.data["OBX.5"]),
+          value: Number.parseFloat(item.data["OBX.5"] as unknown as string),
         });
       }
     });
-    const abnormalData = [];
-    data.forEach((item) => {
+    const abnormalData: ProcessData[] = [];
+    data?.forEach((item: DiagnosticMetrics) => {
       const sonicCode = item.oru_sonic_codes.split(";");
       const standardHigher = Number.parseFloat(item.standard_higher);
-      const standardLower = Number.parseFloat(item.standard_lower);
-      fileData.forEach((element) => {
+      const standardLower = Number.parseFloat(item?.standard_lower);
+      fileData.forEach((element: FileData) => {
         if (sonicCode.includes(element.oru_code)) {
           if (element.value > standardHigher || element.value < standardLower) {
             abnormalData.push({
-              name: Object.values(item)[0],
+              name: String(Object.values(item)[0]),
               value: element.value,
               standardHigher,
               standardLower,
@@ -102,12 +116,12 @@ const interpretPathologyReport = async (obxData, connection) => {
         }
       });
     });
-    const finalResult = [];
-    abnormalData.forEach((element) => {
-      conditionsData.forEach((condition) => {
+    const finalResult: AbnormalData[] = [];
+    abnormalData.forEach((element: ProcessData) => {
+      conditionsData?.forEach((condition: Conditions) => {
         if (condition.diagnostic_metrics.includes(element.name))
           finalResult.push({
-            condition: Object.values(condition)[0],
+            condition: String(Object.values(condition)[0]),
             ...element,
           });
       });
